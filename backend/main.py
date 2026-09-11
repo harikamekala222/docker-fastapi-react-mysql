@@ -13,6 +13,7 @@ models.Base.metadata.create_all(bind=engine)
 
 origins = [
     "http://localhost:3000",
+    "http://13.207.37.203:3000",
 ]
 
 app.add_middleware(
