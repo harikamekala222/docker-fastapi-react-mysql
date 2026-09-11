@@ -8,60 +8,85 @@ pipeline {
 
     stages {
 
-        stage('Deploy') {
+        stage('Copy Application') {
             steps {
                 sh '''
-                    set -e
+                    rm -rf ${APP_DIR}/*
+                    cp -r . ${APP_DIR}/
+                    rm -rf ${APP_DIR}/.git
 
-                    echo "Preparing application..."
+                    chown -R jenkins:jenkins ${APP_DIR}
+                '''
+            }
+        }
 
-                    rm -rf "${APP_DIR:?}"/*
-                    rm -rf "${APP_DIR:?}"/.[!.]*
-                    rm -rf "${APP_DIR:?}"/..?*
+        stage('Check Compose') {
+            steps {
+                sh '''
+                    cd ${APP_DIR}
 
-                    # Copy application without Git metadata
-                    cp -a . "${APP_DIR}/"
-                    rm -rf "${APP_DIR}/.git"
-
-                    chown -R jenkins:jenkins "${APP_DIR}"
-
-                    cd "${APP_DIR}"
-
-                    echo "Checking Docker Compose..."
                     docker compose \
-                        --env-file "${ENV_FILE}" \
+                        --env-file ${ENV_FILE} \
                         config -q
+                '''
+            }
+        }
 
-                    echo "Checking existing containers..."
+        stage('Stop Existing Containers') {
+            steps {
+                sh '''
+                    cd ${APP_DIR}
 
                     if docker compose \
-                        --env-file "${ENV_FILE}" \
+                        --env-file ${ENV_FILE} \
                         ps -q | grep -q .; then
 
-                        echo "Stopping existing containers..."
+                        echo "Existing containers found. Stopping..."
 
                         docker compose \
-                            --env-file "${ENV_FILE}" \
+                            --env-file ${ENV_FILE} \
                             down
+
+                    else
+                        echo "No existing containers found."
                     fi
+                '''
+            }
+        }
 
-                    echo "Building images..."
+        stage('Build Images') {
+            steps {
+                sh '''
+                    cd ${APP_DIR}
 
                     docker compose \
-                        --env-file "${ENV_FILE}" \
+                        --env-file ${ENV_FILE} \
                         build
+                '''
+            }
+        }
 
-                    echo "Starting application..."
+        stage('Start Containers') {
+            steps {
+                sh '''
+                    cd ${APP_DIR}
 
                     docker compose \
-                        --env-file "${ENV_FILE}" \
+                        --env-file ${ENV_FILE} \
                         up -d
+                '''
+            }
+        }
 
-                    echo "Deployment successful."
+        stage('Verify') {
+            steps {
+                sh '''
+                    cd ${APP_DIR}
 
-                    echo "Container status:"
+                    sleep 10
+
                     docker compose \
-                        --env-file "${ENV_FILE}" \
+                        --env-file ${ENV_FILE} \
                         ps
                 '''
             }
@@ -69,24 +94,12 @@ pipeline {
     }
 
     post {
-        failure {
-            sh '''
-                if [ -f "${APP_DIR}/docker-compose.yml" ]; then
-                    cd "${APP_DIR}"
-
-                    docker compose \
-                        --env-file "${ENV_FILE}" \
-                        ps || true
-
-                    docker compose \
-                        --env-file "${ENV_FILE}" \
-                        logs --tail=50 || true
-                fi
-            '''
+        success {
+            echo "Deployment successful."
         }
 
-        success {
-            echo "Deployment completed successfully."
+        failure {
+            echo "Deployment failed."
         }
     }
 }
