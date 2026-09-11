@@ -64,14 +64,14 @@ pipeline {
                 sh '''
                     cd "${APP_DIR}"
 
-                    echo "Checking existing containers..."
+                    echo "Checking existing application containers..."
 
                     if docker compose \
                         --env-file "${ENV_FILE}" \
                         ps -q | grep -q .; then
 
                         echo "Existing application containers found."
-                        echo "Stopping and removing existing containers..."
+                        echo "Stopping application containers..."
 
                         docker compose \
                             --env-file "${ENV_FILE}" \
@@ -80,6 +80,7 @@ pipeline {
                     else
                         echo "No existing application containers found."
                     fi
+
 
                     echo "Checking mysql-container..."
 
@@ -93,6 +94,31 @@ pipeline {
                     else
                         echo "mysql-container does not exist."
                     fi
+
+
+                    echo "Checking port 8000..."
+
+                    CONTAINER_8000=$(docker ps -q --filter "publish=8000")
+
+                    if [ -n "$CONTAINER_8000" ]; then
+                        echo "Container using port 8000 found."
+                        docker rm -f $CONTAINER_8000
+                    else
+                        echo "Port 8000 is free."
+                    fi
+
+
+                    echo "Checking port 3000..."
+
+                    CONTAINER_3000=$(docker ps -q --filter "publish=3000")
+
+                    if [ -n "$CONTAINER_3000" ]; then
+                        echo "Container using port 3000 found."
+                        docker rm -f $CONTAINER_3000
+                    else
+                        echo "Port 3000 is free."
+                    fi
+
 
                     echo "Starting containers..."
 
